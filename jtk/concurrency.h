@@ -867,7 +867,13 @@ namespace jtk
       void stop()
         {
         std::unique_lock<std::mutex> lock(_threadpool_mutex);
-        _quit = true;
+          {
+          // Under the queue's mutex: a worker tests _quit under it and then waits. Set without it,
+          // the notification can come between a worker's test and its wait; that worker then waits
+          // for ever, and the join below hangs.
+          std::lock_guard<std::mutex> queue_lock(_queue_mutex);
+          _quit = true;
+          }
         _query_cv.notify_all();
         for (auto& t : _pool)
           t.join();
@@ -899,7 +905,7 @@ namespace jtk
       std::condition_variable _completed_all_jobs_cv;
       std::queue<t_job_type> _queue;
       int _busy;
-      bool _quit;
+      std::atomic<bool> _quit; // also read without a lock, in the loop condition of _query_loop
     };
 
   template <class _Type, class TFunctor>
