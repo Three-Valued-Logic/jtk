@@ -54,10 +54,28 @@ namespace jtk
     TEST_EQ(10000, g_counter);
     }
 
+  // thread_pool::stop right after the work: every worker leaves its loop and stop returns. Repeated,
+  // as a lost wakeup in stop (the notification between a worker's test of _quit and its wait) hung
+  // the join only now and then.
+  void thread_pool_stop_test()
+    {
+    for (int round = 0; round < 200; ++round)
+      {
+      thread_pool tp;
+      tp.init();
+      std::atomic<int> sum(0);
+      pooled_parallel_for(0, 64, [&](int i) { sum += i; }, tp);
+      TEST_EQ(64 * 63 / 2, sum.load());
+      tp.stop();
+      TEST_EQ((size_t)0, tp.size());
+      }
+    }
+
   }
 
 void run_all_concurrency_tests()
   {
   using namespace jtk;
   spin_lock_rw_test();
+  thread_pool_stop_test();
   }
